@@ -1,131 +1,95 @@
-# import time
-# import google.generativeai as genai
-# import streamlit as st
-# import os
-
-# with st.sidebar:
-#     st.title("Chave da API Gemini")
-#     gemini_api_key = st.text_input("Gemini API Key", key="chatbot_api_key", type="password")
-
-# st.title("💬 Chatbot com Gemini")
-# st.caption("🚀 Um chatbot Streamlit alimentado pelo Google Gemini")
-
-# if "messages" not in st.session_state:
-#     st.session_state["messages"] = [{"role": "model", "content": "Olá! Em que posso ajudar hoje?"}]
-
-# for msg in st.session_state.messages:
-#     st.chat_message(msg["role"]).write(msg["content"])
-
-# if prompt := st.chat_input():
-#     if not gemini_api_key:
-#         st.info("Por favor, adicione sua chave da API do Gemini para continuar.")
-#         st.stop()
-
-#     genai.configure(api_key=gemini_api_key)
-
-#     st.session_state.messages.append({"role": "user", "content": prompt})
-#     st.chat_message("user").write(prompt)
-
-#     try:
-#         model = genai.GenerativeModel('gemini-1.5-flash-latest')
-#         chat = model.start_chat(history=[])
-#         response = chat.send_message(prompt)
-#         msg = response.text
-
-#         st.session_state.messages.append({"role": "model", "content": msg})
-
-#         # Efeito de digitação palavra por palavra
-#         with st.chat_message("model"):
-#             message_placeholder = st.empty()
-#             typed_text = ""
-#             for word in msg.split():
-#                 typed_text += word + " "
-#                 message_placeholder.markdown(typed_text + "▌")
-#                 time.sleep(0.1)
-#             message_placeholder.markdown(typed_text)
-
-#     except Exception as e:
-#         st.error(f"Ocorreu um erro ao chamar a API do Gemini: {e}")
-
-
-
-from gemini_automator import GeminiAutomator
 import streamlit as st
-import google.generativeai as genai
-import os
+from gemini_automator import GeminiAutomator
 
-
-# --- Lógica do Frontend com Streamlit ---
 st.set_page_config(page_title="Gerador de Documentos de Requisitos com Gemini", layout="wide")
+st.title("👩‍💻 Engenharia de Requisitos com Gemini")
 
-st.title("✍️ Gerador de Documentos de Requisitos com Gemini")
-st.markdown("Use a inteligência artificial para auxiliar na criação de seções de documentos de requisitos.")
+# --- Inicialização de estado ---
+for key in ['automator', 'assunto', 'conteudo_gerado', 'secao_atual_index', 'documento_completo']:
+    if key not in st.session_state:
+        st.session_state[key] = None if key == 'automator' else "" if key == 'assunto' else 0 if key == 'secao_atual_index' else ""
 
-# Inicializa o automator (cria uma instância uma vez para a sessão)
-# @st.cache_resource garante que o objeto GeminiAutomator seja criado apenas uma vez
-@st.cache_resource
-def get_automator():
-    return GeminiAutomator()
+# --- Fluxo de Geração ---
+opcoes_fluxo = [
+    ("Introdução e Contexto", "contexto_documento"),
+    ("Requisitos Funcionais", "requisitos_funcionais"),
+    ("Requisitos Não Funcionais", "requisitos_nao_funcionais"),
+    ("Matriz de Rastreabilidade", "matriz_rastreabilidade"),
+]
 
-automator = get_automator()
-
-# --- Entrada do Usuário: Assunto do Sistema ---
-st.header("1. Assunto do Sistema")
-st.markdown("Qual é o tema ou nome do sistema que você quer documentar?")
-tema_do_sistema = st.text_input("Ex: Sistema de Gestão de Eventos, Plataforma de E-commerce, Aplicativo de Saúde", 
-                                 key="tema_input", 
-                                 placeholder="Digite o assunto aqui...",
-                                 help="O assunto será usado para gerar todas as seções do documento.")
-
-st.markdown("---")
-
-# --- Seleção da Funcionalidade ---
-st.header("2. Selecione a Seção para Gerar")
-
-opcoes_geracao = {
-    "Introdução": automator.gerar_introducao_documento,
-    "Stakeholders": automator.listar_stakeholders,
-    "Visão Geral do Sistema": automator.gerar_visao_geral_sistema,
-    "Requisitos Funcionais (15 itens)": automator.listar_requisitos_funcionais,
-    "Requisitos de Qualidade (10 itens)": automator.listar_requisitos_qualidade,
-    "Restrições de Projeto (5 itens)": automator.listar_restricoes_projeto,
-    "Regras de Negócio (5 itens)": automator.listar_regras_negocio,
-    "Requisitos Informacionais (5 itens)": automator.listar_requisitos_informacionais,
-}
-
-# Criar um menu suspenso (select box) para o usuário escolher
-secao_selecionada = st.selectbox(
-    "Escolha qual seção do documento de requisitos você deseja gerar:",
-    options=list(opcoes_geracao.keys()),
-    key="secao_select"
-)
-
-# Botão para gerar o conteúdo
-gerar_botao = st.button("Gerar Seção", type="primary")
-
-st.markdown("---")
-
-# --- Exibição do Resultado ---
-st.header("3. Resultado Gerado")
-if gerar_botao and tema_do_sistema:
-    with st.spinner("Gerando conteúdo... Por favor, aguarde."):
-        # Chama o método correspondente baseado na seleção do usuário
-        funcao_selecionada = opcoes_geracao[secao_selecionada]
-        conteudo_gerado = funcao_selecionada(tema_do_sistema)
-    
-    st.subheader(f"Conteúdo para '{secao_selecionada}' sobre '{tema_do_sistema}':")
-    st.write(conteudo_gerado) # st.write renderiza Markdown automaticamente
-    
-    # Opção para copiar o texto
-    st.download_button(
-        label="Copiar Texto",
-        data=conteudo_gerado,
-        file_name=f"{secao_selecionada.lower().replace(' ', '_')}_{tema_do_sistema.lower().replace(' ', '_')}.txt",
-        mime="text/plain"
+# --- Etapa 1: Tema do sistema ---
+if st.session_state.automator is None:
+    st.header("1. Qual o tema do seu sistema?")
+    tema_input = st.text_input(
+        "Ex: Sistema de Gestão de Eventos, Plataforma de E-commerce, Aplicativo de Saúde",
+        placeholder="Digite o assunto aqui...",
+        help="Esse tema será usado para guiar a IA na criação das seções do documento."
     )
 
-elif gerar_botao and not tema_do_sistema:
-    st.warning("Por favor, insira o **Assunto do Sistema** antes de gerar a seção.")
-
+    if st.button("Iniciar Geração do Documento", type="primary"):
+        if tema_input and len(tema_input.strip()) >= 10:
+            st.session_state.assunto = tema_input.strip()
+            with st.spinner("Inicializando IA para o seu projeto..."):
+                try:
+                    st.session_state.automator = GeminiAutomator(st.session_state.assunto)
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Erro ao inicializar a IA: {e}")
+        else:
+            st.warning("Descreva melhor o tema. Mínimo 10 caracteres.")
 else:
-    st.info("Digite o assunto do sistema e selecione a seção desejada para começar.")
+    st.header(f"Documento de Requisitos: **{st.session_state.assunto}**")
+    st.markdown("---")
+
+    if st.session_state.secao_atual_index < len(opcoes_fluxo):
+        secao_nome, metodo_nome = opcoes_fluxo[st.session_state.secao_atual_index]
+
+        # Verifica se o conteúdo já foi gerado e está aguardando confirmação
+        if st.session_state.conteudo_gerado:
+            st.subheader(f"✅ Conteúdo Gerado: {secao_nome}")
+            st.markdown(st.session_state.conteudo_gerado)
+
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("✅ Confirmar e Continuar", key="confirmar_secao"):
+                    st.session_state.documento_completo += f"\n\n## {secao_nome}\n{st.session_state.conteudo_gerado}"
+                    st.session_state.conteudo_gerado = ""
+                    st.session_state.secao_atual_index += 1
+                    st.rerun()
+
+            with col2:
+                if st.button("🔄 Regenerar Seção", key="regenerar_secao"):
+                    st.session_state.conteudo_gerado = ""
+                    st.rerun()
+        else:
+            st.info(f"Próxima seção: **{secao_nome}**")
+
+            if st.button(f"Gerar '{secao_nome}'", key=f"btn_{secao_nome}"):
+                with st.spinner(f"Gerando '{secao_nome}'..."):
+                    func = getattr(st.session_state.automator, metodo_nome)
+                    resposta = func()
+
+                    if not resposta.strip():
+                        st.warning("A IA não gerou conteúdo. Tente novamente.")
+                    elif "bloqueado" in resposta.lower():
+                        st.warning("Conteúdo bloqueado por política da API.")
+                    elif "Erro ao gerar" in resposta:
+                        st.error(resposta)
+                    else:
+                        st.session_state.conteudo_gerado = resposta
+                        st.rerun()
+    else:
+        st.success("✅ Todas as seções foram geradas!")
+        st.subheader("📄 Documento Completo:")
+        st.markdown(st.session_state.documento_completo)
+
+        st.download_button(
+            label="📥 Baixar Documento (.md)",
+            data=st.session_state.documento_completo,
+            file_name=f"documento_requisitos_{st.session_state.assunto.lower().replace(' ', '_')}.md",
+            mime="text/markdown"
+        )
+
+        if st.button("🔄 Reiniciar"):
+            st.session_state.clear()
+            st.rerun()
