@@ -40,7 +40,7 @@ class GeminiAutomator:
 
     def requisitos_funcionais(self) -> str:
         prompt = (
-            "Gere a seção de Requisitos Funcionais. Liste no mínimo 15 RFs detalhados usando este template:\n"
+            "Gere a seção de Requisitos Funcionais. Liste no mínimo 20 RFs detalhados usando este template:\n"
             "| ID | Título | Descrição | Critério de Aceitação | Prioridade (MoSCoW) |\n"
             "**Formato:** [**Como um** <stakeholder>, **eu quero** <ação> **para que** <objetivo>.]"
         )
